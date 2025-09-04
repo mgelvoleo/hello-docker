@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  hello-app:
+    image: ${DOCKERHUB_USERNAME}/hello-docker:latest
+    container_name: hello-app
+    restart: unless-stopped
+    ports:
+      - "80:3000"

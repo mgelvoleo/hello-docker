@@ -1,4 +1,3 @@
- 
 name: CI/CD Pipeline
 
 on:
@@ -7,7 +6,6 @@ on:
 
 jobs:
   test:
-    name: Install & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,13 +13,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - name: Install dependencies
-        run: npm ci
-      - name: Run tests
-        run: npm test
+      - run: npm ci
+      - run: npm test
 
   build-and-push:
-    name: Build and Push Docker image
     runs-on: ubuntu-latest
     needs: test
     steps:
@@ -43,14 +38,15 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker:${{ github.sha }}
 
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -58,7 +54,20 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
-            docker stop hello-app || true
-            docker rm hello-app || true
-            docker run -d --name hello-app --restart unless-stopped -p 80:3000 ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
+            mkdir -p ~/apps/hello-docker
+            cd ~/apps/hello-docker
+            # upload latest docker-compose.yml from repo
+            cat > docker-compose.yml <<'EOF'
+            version: "3.8"
+
+            services:
+              hello-app:
+                image: ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker:latest
+                container_name: hello-app
+                restart: unless-stopped
+                ports:
+                  - "80:3000"
+            EOF
+
+            docker compose pull
+            docker compose up -d
