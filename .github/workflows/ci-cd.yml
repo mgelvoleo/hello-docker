@@ -1,9 +1,8 @@
+ 
 name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 
 jobs:
@@ -34,9 +33,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -47,6 +43,22 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:${{ github.sha }}
 
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
+            docker stop hello-app || true
+            docker rm hello-app || true
+            docker run -d --name hello-app --restart unless-stopped -p 80:3000 ${{ secrets.DOCKERHUB_USERNAME }}/hello-docker-ghactions:latest
